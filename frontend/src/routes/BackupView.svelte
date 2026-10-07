@@ -112,10 +112,13 @@
 
   async function copySummary(): Promise<void> {
     const text = conclusions
-      .map(
-        (line) =>
-          `${line.buildingName}（${line.protectionClass} / ${line.usage}）：装置 ${line.deviceCount} 处，测点 ${line.pointCount} 个，不合格 ${line.unqualifiedCount} 个，合格率 ${line.qualifyRatePct}%。${line.conclusion}。最不利点：${line.worstPoint}。${line.advice}`
-      )
+      .map((line) => {
+        const retestText =
+          line.retestStatus === '待补检'
+            ? `复测状态待补检，缺检装置：${line.missingDevices.length > 0 ? line.missingDevices.join('、') : '装置或测点缺失'}，须同一日期补齐`
+            : `复测状态${line.retestStatus}，最近全检批次 ${line.lastBatchDate ?? '—'}，到期日 ${line.dueDate ?? '—'}（${line.retestStatus === '已到期' ? `已超期 ${Math.abs(line.daysToDue ?? 0)} 天` : `剩 ${line.daysToDue ?? 0} 天`}）${line.missingDevices.length > 0 ? `，另有缺检装置：${line.missingDevices.join('、')}` : ''}`
+        return `${line.buildingName}（${line.protectionClass} / ${line.usage}，周期 ${line.intervalMonths} 个月）：装置 ${line.deviceCount} 处，测点 ${line.pointCount} 个，不合格 ${line.unqualifiedCount} 个，合格率 ${line.qualifyRatePct}%。${line.conclusion}。最不利点：${line.worstPoint}。${retestText}。${line.advice}`
+      })
       .join('\n')
     try {
       await navigator.clipboard.writeText(text)
@@ -146,7 +149,8 @@
     <div>
       <h2 class="page__title">检测结论与结构版本导出</h2>
       <p class="gb-hint">
-        按建筑物汇总检测结论（装置数、测点数、不合格数、合格率与最不利点），并可导出 / 导入全量 JSON 备份。
+        按建筑物汇总检测结论（装置数、测点数、不合格数、合格率、最不利点与复测到期日 / 缺检装置），并可导出 / 导入全量 JSON 备份。
+        到期判断只认覆盖全部装置的最近检测批次。
       </p>
     </div>
     <div class="page__actions">
@@ -193,6 +197,10 @@
             <th class="is-num">装置</th>
             <th class="is-num">测点</th>
             <th class="is-num">不合格</th>
+            <th>复测状态</th>
+            <th>最近批次 / 周期</th>
+            <th>到期日</th>
+            <th>缺检装置</th>
             <th>检测结论</th>
             <th>最不利点</th>
             <th>整改建议</th>
@@ -200,7 +208,7 @@
         </thead>
         <tbody>
           {#each conclusions as line (line.buildingId)}
-            <tr class:is-bad={line.unqualifiedCount > 0}>
+            <tr class:is-bad={line.unqualifiedCount > 0} class:is-due={line.retestStatus === '已到期'} class:is-supplement={line.retestStatus === '待补检'}>
               <td>{line.buildingName}</td>
               <td>
                 <span class="gb-tag">{line.protectionClass}</span>
@@ -209,6 +217,27 @@
               <td class="is-num gb-mono">{line.deviceCount}</td>
               <td class="is-num gb-mono">{line.pointCount}</td>
               <td class="is-num gb-mono">{line.unqualifiedCount}</td>
+              <td><span class="retest-tag status-{line.retestStatus}">{line.retestStatus}</span></td>
+              <td class="gb-mono gb-hint">
+                {line.lastBatchDate ?? '无全覆盖批次'}<br />每 {line.intervalMonths} 个月
+              </td>
+              <td class="gb-mono">
+                {#if line.dueDate}
+                  {line.dueDate}
+                  <span class="gb-hint">
+                    <br />{line.retestStatus === '已到期' ? `超期 ${Math.abs(line.daysToDue ?? 0)} 天` : `剩 ${line.daysToDue ?? 0} 天`}
+                  </span>
+                {:else}
+                  <span class="gb-danger">—</span>
+                {/if}
+              </td>
+              <td class="gb-hint">
+                {#if line.missingDevices.length > 0}
+                  {line.missingDevices.join('、')}
+                {:else}
+                  <span class="ok-text">无</span>
+                {/if}
+              </td>
               <td>
                 <div>{line.conclusion}</div>
                 <div class="gb-hint">合格率 {line.qualifyRatePct}%</div>
@@ -348,5 +377,46 @@
 
   tr.is-bad td {
     background: #fff6f4;
+  }
+
+  tr.is-due td {
+    background: #fff0ee;
+  }
+
+  tr.is-supplement td {
+    background: #fffaf0;
+  }
+
+  .retest-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .retest-tag.status-有效 {
+    color: #1e8449;
+    background: #eafaf1;
+    border-color: #b8e6c9;
+  }
+
+  .retest-tag.status-已到期 {
+    color: #c0392b;
+    background: #fdedec;
+    border-color: #f2b6af;
+  }
+
+  .retest-tag.status-待补检 {
+    color: #8a5a12;
+    background: #fff8ec;
+    border-color: #f0c78a;
+  }
+
+  .ok-text {
+    color: #1e8449;
   }
 </style>

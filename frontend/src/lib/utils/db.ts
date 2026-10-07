@@ -143,12 +143,20 @@ interface SeedDevice {
 }
 
 /**
- * 播种演示数据：2 栋建筑物 → 6 个防雷装置 → 9 个测点 → 逐点自动初判 → 2 条整改建议，
+ * 播种演示数据：3 栋建筑物 → 7 个防雷装置 → 9 个测点 → 逐点自动初判 → 2 条整改建议，
  * 保证父 → 子 → 孙三层链路可点开，且既有合格也有不合格样本。
+ * 复测状态同时覆盖三种情形：
+ * - 临港油库（一类 / 油库，周期 12 个月）：全部装置今日有测点 → 有效；
+ * - 市第一医院（二类，周期 18 个月）：全覆盖批次在约 20 个月前 → 已到期；
+ * - 第三中学（三类，周期 24 个月）：新增接地体尚无测点 → 待补检。
  */
 export async function seedDemoData(): Promise<void> {
   const now = Date.now()
   const today = new Date(now).toISOString().slice(0, 10)
+  // 约 20 个月前：二类建筑周期 18 个月，该日期批次已到期（按整月回退 20 个月）
+  const overdueDate = new Date(now)
+  overdueDate.setUTCMonth(overdueDate.getUTCMonth() - 20)
+  const pastDate = overdueDate.toISOString().slice(0, 10)
 
   const buildings: Array<Omit<Building, 'createdAt' | 'updatedAt'>> = [
     {
@@ -291,7 +299,7 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 7.4,
           limitOhm: 10,
           meter: 'DER2571 数字接地电阻表 / No.A221104',
-          measureDate: today
+          measureDate: pastDate
         }
       ]
     },
@@ -312,7 +320,7 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 8.9,
           limitOhm: 10,
           meter: 'DER2571 数字接地电阻表 / No.A221104',
-          measureDate: today
+          measureDate: pastDate
         },
         {
           id: 'pnt_hosp_down_2',
@@ -322,9 +330,20 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 15.2,
           limitOhm: 10,
           meter: 'DER2571 数字接地电阻表 / No.A221104',
-          measureDate: today
+          measureDate: pastDate
         }
       ]
+    },
+    {
+      // 学校新增装置尚未录入测点：整栋标「待补检」，演示设备新增 / 测点缺失口径
+      id: 'dev_school_grid',
+      buildingId: 'bld_school03',
+      type: '接地体',
+      material: '热镀锌扁钢',
+      spec: '-50×5',
+      quantity: 6,
+      installDate: '2024-03-15',
+      points: []
     },
     {
       id: 'dev_school_belt',

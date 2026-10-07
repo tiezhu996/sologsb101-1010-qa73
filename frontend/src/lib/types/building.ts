@@ -1,4 +1,6 @@
 /** 防雷类别：按 GB 50057 划分，决定接地电阻限值初始建议 */
+import type { RetestStatus } from '$lib/types/retest'
+
 export type ProtectionClass = '一类' | '二类' | '三类'
 
 export const PROTECTION_CLASSES: ProtectionClass[] = ['一类', '二类', '三类']
@@ -33,6 +35,8 @@ export interface BuildingFilterState {
   minFloors: number | null
   /** 是否只看存在不合格测点的建筑物 */
   onlyUnqualified: boolean
+  /** 复测状态多选：有效 / 已到期 / 待补检 */
+  retestStatuses: RetestStatus[]
 }
 
 export function createEmptyBuildingFilter(): BuildingFilterState {
@@ -41,7 +45,8 @@ export function createEmptyBuildingFilter(): BuildingFilterState {
     usages: [],
     protectionClasses: [],
     minFloors: null,
-    onlyUnqualified: false
+    onlyUnqualified: false,
+    retestStatuses: []
   }
 }
 

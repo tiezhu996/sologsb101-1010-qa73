@@ -22,10 +22,12 @@
     updatePoint
   } from '$lib/stores/pointStore.ts'
   import { buildingById, deviceList, selectBuilding } from '$lib/stores/buildingStore.ts'
+  import { retestPlans } from '$lib/stores/retestStore.ts'
   import { parsePointPaste } from '$lib/types/point.ts'
   import type { Point, PointPasteRow } from '$lib/types/point.ts'
   import { DEVICE_TYPES } from '$lib/types/device.ts'
   import type { DeviceType } from '$lib/types/device.ts'
+  import { formatMissingDevice } from '$lib/utils/retest.ts'
   import { isQualified, limitRatio, qualifyRate, suggestLimitOhm } from '$lib/utils/resistance.ts'
   import { readQuery, writeQuery } from '$lib/utils/query.ts'
   import { useRouter } from '$lib/utils/router.ts'
@@ -105,6 +107,7 @@
     $activeDeviceId ? $deviceList.find((device) => device.id === $activeDeviceId) ?? null : null
   )
   const activeBuilding = $derived(activeDevice ? buildingById(activeDevice.buildingId) : null)
+  const activeRetest = $derived(activeBuilding ? $retestPlans.get(activeBuilding.id) ?? null : null)
   const defaultLimit = $derived(
     activeDevice ? suggestLimitOhm(activeBuilding?.protectionClass ?? '三类', activeDevice.type) : 10
   )
@@ -263,6 +266,24 @@
       <button class="btn btn--primary" type="button" onclick={openCreate}>＋ 新增测点</button>
     </div>
   </div>
+
+  {#if activeRetest && activeRetest.status === '待补检'}
+    <p class="gb-alert">
+      「{activeBuilding?.name ?? '当前建筑物'}」处于待补检：
+      {#if activeRetest.missingDevices.length > 0}
+        缺检 {activeRetest.missingDevices.length} 处装置（{activeRetest.missingDevices
+          .map((device) => formatMissingDevice(device))
+          .join('、')}），
+      {/if}
+      请在<b>同一检测日期</b>为全部装置补齐测点后，复测有效期才恢复。
+    </p>
+  {:else if activeRetest && activeRetest.status === '已到期'}
+    <p class="gb-alert">
+      「{activeBuilding?.name ?? '当前建筑物'}」已到复测期：最近全检批次 {activeRetest.lastBatchDate ?? '—'}，
+      应于 {activeRetest.dueDate} 前复测（已超期 {Math.abs(activeRetest.daysToDue ?? 0)} 天）；
+      本次须覆盖全部装置，新读数日期一致才形成新批次。
+    </p>
+  {/if}
 
   <FilterBar
     keyword={keyword}

@@ -11,6 +11,7 @@ import {
   stampBackupTime,
   type BackupPayload
 } from '$lib/utils/db'
+import { buildRetestPlan, formatMissingDevice, type RetestPlan } from '$lib/utils/retest'
 
 /** 备份集合键名 */
 export const BACKUP_KEYS = ['buildings', 'devices', 'points', 'verdicts', 'rectifies'] as const
@@ -154,7 +155,7 @@ export function remapIds(payload: BackupPayload): BackupPayload {
   return { ...payload, buildings, devices, points, verdicts, rectifies }
 }
 
-/** 检测结论行：按建筑物汇总测点数、不合格数与结论文字 */
+/** 检测结论行：按建筑物汇总测点数、不合格数、复测计划与结论文字 */
 export interface ConclusionLine {
   buildingId: string
   buildingName: string
@@ -166,11 +167,23 @@ export interface ConclusionLine {
   qualifyRatePct: number
   /** 最不利（实测/限值比最大）测点摘要 */
   worstPoint: string
+  /** 复测状态：有效 / 已到期 / 待补检 */
+  retestStatus: RetestPlan['status']
+  /** 复测周期（月） */
+  intervalMonths: number
+  /** 最近一次覆盖全部装置的检测批次日期 */
+  lastBatchDate: string | null
+  /** 到期日（批次日期 + 周期）；待补检为 null */
+  dueDate: string | null
+  /** 距到期天数（负为已超期天数）；待补检为 null */
+  daysToDue: number | null
+  /** 缺检装置名称列表 */
+  missingDevices: string[]
   conclusion: string
   advice: string
 }
 
-/** 生成按建筑物的检测结论与整改建议汇总 */
+/** 生成按建筑物的检测结论与整改建议汇总（含复测到期日与缺检装置） */
 export function buildConclusionLines(payload: BackupPayload): ConclusionLine[] {
   const deviceById = new Map(payload.devices.map((device) => [device.id, device]))
   const verdictByPoint = new Map(payload.verdicts.map((verdict) => [verdict.pointId, verdict]))
@@ -199,16 +212,38 @@ export function buildConclusionLines(payload: BackupPayload): ConclusionLine[] {
         : Number((((verdicts.length - unqualified.length) / verdicts.length) * 100).toFixed(1))
     const rectifies = payload.rectifies.filter((rectify) => rectify.buildingId === building.id)
     const pending = rectifies.filter((rectify) => rectify.state !== '已复检').length
-    const conclusion =
-      points.length === 0
-        ? '未录入测点，无法出具结论'
-        : unqualified.length === 0
+
+    // 复测计划：到期口径只认覆盖全部装置的最近检测批次
+    const retest = buildRetestPlan(building, devices, points)
+    const missingDevices = retest.missingDevices.map((device) => formatMissingDevice(device))
+
+    let conclusion: string
+    if (retest.status === '待补检') {
+      conclusion = `存在缺检装置或测点缺失，无法按全覆盖批次出具有效期结论，须先补检`
+    } else if (points.length === 0) {
+      conclusion = '未录入测点，无法出具结论'
+    } else if (retest.status === '已到期') {
+      conclusion =
+        unqualified.length === 0
+          ? `最近批次 ${retest.lastBatchDate} 电阻判定合格，但已超复测周期（应于 ${retest.dueDate} 前复测）`
+          : `所检 ${points.length} 个测点中 ${unqualified.length} 个不合格，且已超复测周期（应于 ${retest.dueDate} 前复测）`
+    } else {
+      conclusion =
+        unqualified.length === 0
           ? `所检 ${points.length} 个测点接地电阻均不大于限值，判定合格`
           : `所检 ${points.length} 个测点中 ${unqualified.length} 个不合格，判定不合格`
+    }
+
+    const retestAdvice =
+      retest.status === '待补检'
+        ? `待补检：${missingDevices.length > 0 ? `补齐缺检装置 ${missingDevices.join('、')}，且全部装置须为同一检测日期` : '先登记装置并在同一日期补齐测点'}`
+        : retest.status === '已到期'
+          ? `已到复测期：应于 ${retest.dueDate} 前完成复测（已超期 ${Math.abs(retest.daysToDue ?? 0)} 天）`
+          : `复测有效期至 ${retest.dueDate}（剩 ${retest.daysToDue} 天）`
     const advice =
       rectifies.length === 0
-        ? '无需整改，建议按周期复测'
-        : `已生成 ${rectifies.length} 条整改建议，其中 ${pending} 条未完成复检闭环`
+        ? `无需整改，${retestAdvice}`
+        : `已生成 ${rectifies.length} 条整改建议，其中 ${pending} 条未完成复检闭环；${retestAdvice}`
     return {
       buildingId: building.id,
       buildingName: building.name,
@@ -219,6 +254,12 @@ export function buildConclusionLines(payload: BackupPayload): ConclusionLine[] {
       unqualifiedCount: unqualified.length,
       qualifyRatePct,
       worstPoint,
+      retestStatus: retest.status,
+      intervalMonths: retest.intervalMonths,
+      lastBatchDate: retest.lastBatchDate,
+      dueDate: retest.dueDate,
+      daysToDue: retest.daysToDue,
+      missingDevices,
       conclusion,
       advice
     }

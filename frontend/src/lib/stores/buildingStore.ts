@@ -6,7 +6,8 @@
  *   buildingStore → utils/db、types/*、utils/resistance
  * 本模块**不得** import pointStore：那会与 pointStore → buildingStore 形成 ES 模块循环依赖，
  * 浏览器运行时抛 `Cannot access 'X' before initialization`，导致整站白屏。
- * 同时依赖两个 store 的派生值统一放在 stores/pointStats.ts。
+ * 同时依赖两个 store 的派生值统一放在 stores/pointStats.ts；
+ * 复测计划（批次 / 到期 / 待补检）的跨 store 派生放在 stores/retestStore.ts。
  */
 import { derived, get, writable } from 'svelte/store'
 import { db, readLastBuildingId, watchTable, writeLastBuildingId } from '$lib/utils/db'
