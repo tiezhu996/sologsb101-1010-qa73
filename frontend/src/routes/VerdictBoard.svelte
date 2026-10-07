@@ -31,6 +31,7 @@
   } from '$lib/stores/rectifyStore.ts'
   import { buildingList, deviceList } from '$lib/stores/buildingStore.ts'
   import { pointList } from '$lib/stores/pointStore.ts'
+  import { retestStatusCounts } from '$lib/stores/retestPlanStore.ts'
   import { RECTIFY_STATES, RECTIFY_TRANSITIONS, SUGGESTION_TEMPLATES } from '$lib/types/rectify.ts'
   import type { RectifyState } from '$lib/types/rectify.ts'
   import { VERDICT_RESULTS } from '$lib/types/verdict.ts'
@@ -294,6 +295,13 @@
 
   {#if notice}
     <p class="gb-alert">{notice}</p>
+  {/if}
+
+  {#if $retestStatusCounts.已到期 > 0 || $retestStatusCounts.待补检 > 0}
+    <p class="gb-alert">
+      复测提醒：{$retestStatusCounts.已到期} 栋已过复测周期、{$retestStatusCounts.待补检} 栋待补检
+      （新增装置或测点未在同一日期覆盖全部装置）。判定合格不等于在复测有效期内，请先到建筑物台账核对最近全覆盖检测批次与到期日。
+    </p>
   {/if}
 
   <div class="gb-stats-row">

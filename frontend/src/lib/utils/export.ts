@@ -11,6 +11,7 @@ import {
   stampBackupTime,
   type BackupPayload
 } from '$lib/utils/db'
+import { buildRetestPlan, describeCycle, describeRetestStatus, type RetestMissingDevice } from '$lib/utils/retest'
 
 /** 备份集合键名 */
 export const BACKUP_KEYS = ['buildings', 'devices', 'points', 'verdicts', 'rectifies'] as const
@@ -164,6 +165,22 @@ export interface ConclusionLine {
   pointCount: number
   unqualifiedCount: number
   qualifyRatePct: number
+  /** 复测周期（月）：一类 12 / 二类 18 / 三类 24，油库与化工厂统一 12 */
+  cycleMonths: number
+  /** 周期中文说明 */
+  cycleText: string
+  /** 最近一次覆盖全部装置且都有测点的检测批次日期 */
+  lastBatchDate: string | null
+  /** 复测到期日 */
+  dueDate: string | null
+  /** 复测状态 */
+  retestStatus: string
+  /** 状态说明 */
+  retestStatusText: string
+  /** 缺检装置（新增装置或测点缺失，需同一日期补齐） */
+  missingDevices: RetestMissingDevice[]
+  /** 缺检装置摘要 */
+  missingDeviceText: string
   /** 最不利（实测/限值比最大）测点摘要 */
   worstPoint: string
   conclusion: string
@@ -199,6 +216,17 @@ export function buildConclusionLines(payload: BackupPayload): ConclusionLine[] {
         : Number((((verdicts.length - unqualified.length) / verdicts.length) * 100).toFixed(1))
     const rectifies = payload.rectifies.filter((rectify) => rectify.buildingId === building.id)
     const pending = rectifies.filter((rectify) => rectify.state !== '已复检').length
+
+    // 复测计划：唯一依据为最近一次覆盖全部装置且每个装置都有测点的检测批次
+    const plan = buildRetestPlan(building, devices, points)
+    const cycleText = describeCycle(building)
+    const retestStatusText = describeRetestStatus(plan)
+    const missingDeviceText =
+      plan.missingDevices.length === 0
+        ? '无'
+        : plan.missingDevices
+            .map((item) => `${item.deviceType}${item.spec ? `（${item.spec}）` : ''}`)
+            .join('、')
     const conclusion =
       points.length === 0
         ? '未录入测点，无法出具结论'
@@ -218,6 +246,14 @@ export function buildConclusionLines(payload: BackupPayload): ConclusionLine[] {
       pointCount: points.length,
       unqualifiedCount: unqualified.length,
       qualifyRatePct,
+      cycleMonths: plan.cycleMonths,
+      cycleText,
+      lastBatchDate: plan.lastBatchDate,
+      dueDate: plan.dueDate,
+      retestStatus: plan.status,
+      retestStatusText,
+      missingDevices: plan.missingDevices,
+      missingDeviceText,
       worstPoint,
       conclusion,
       advice

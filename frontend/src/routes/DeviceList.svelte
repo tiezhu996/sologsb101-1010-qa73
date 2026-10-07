@@ -22,6 +22,7 @@
     updateDevice
   } from '$lib/stores/buildingStore.ts'
   import { pointStatsByDevice } from '$lib/stores/pointStats.ts'
+  import { retestPlanMap } from '$lib/stores/retestPlanStore.ts'
   import { pointsOfDevice } from '$lib/stores/pointStore.ts'
   import { DEVICE_MATERIALS, DEVICE_TYPES } from '$lib/types/device.ts'
   import type { Device, DeviceType } from '$lib/types/device.ts'
@@ -66,13 +67,16 @@
     types: $deviceFilter.types as string[]
   })
 
-  /** 装置行：附带建筑物名、测点统计与是否展开 */
+  /** 装置行：附带建筑物名、测点统计、复测批次覆盖情况与是否展开 */
   const rows = $derived(
     $filteredDevices
       .map((device) => {
         const building = buildingById(device.buildingId)
         const stats = $pointStatsByDevice[device.id] ?? { count: 0, unqualified: 0, minOhm: 0, maxOhm: 0 }
-        return { device, building, stats, expanded: expandedDeviceId === device.id }
+        const plan = $retestPlanMap.get(device.buildingId) ?? null
+        const missing = plan?.missingDevices.find((item) => item.deviceId === device.id) ?? null
+        const covered = stats.count > 0 && !missing
+        return { device, building, stats, plan, missing, covered, expanded: expandedDeviceId === device.id }
       })
       .filter((row) => !$deviceFilter.onlyWithoutPoint || row.stats.count === 0)
       .sort((a, b) => (a.building?.name ?? '').localeCompare(b.building?.name ?? '', 'zh-Hans-CN'))
@@ -247,6 +251,7 @@
             <th>安装日期</th>
             <th class="is-num">测点数</th>
             <th>合格情况</th>
+            <th>复测批次覆盖</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -277,6 +282,20 @@
                   <span class="ok-text">全部合格</span>
                 {/if}
               </td>
+              <td>
+                {#if row.missing}
+                  <span class="gb-danger">
+                    {row.missing.reason === 'no-point' ? '缺检：无测点' : '缺检：未并入同一检测批次'}
+                  </span>
+                  {#if row.plan}
+                    <div class="gb-hint">整栋待补检，需同日期补齐</div>
+                  {/if}
+                {:else if row.plan?.lastBatchDate}
+                  <span class="ok-text">已并入 {row.plan.lastBatchDate} 批次</span>
+                {:else}
+                  <span class="gb-hint">—</span>
+                {/if}
+              </td>
               <td class="row-actions">
                 <button class="btn btn--primary btn--small" type="button" onclick={() => gotoPoints(row.device)}>
                   测点
@@ -289,7 +308,7 @@
             </tr>
             {#if row.expanded}
               <tr class="expand-row">
-                <td colspan="8">
+                <td colspan="9">
                   <div class="expand">
                     <strong class="expand__title">
                       {row.device.type} · 全部测点（限值建议 {suggestLimitOhm(
@@ -337,6 +356,7 @@
 
   <p class="gb-hint">
     提示：装置数量用于统计接闪带长度（m）、引下线根数与接地体数量；数量单位为「根 / 处 / 米」，可按实际填写。
+    新增装置或装置下没有测点时，所属建筑物整栋标「待补检」；即便每台装置都有测点，也必须在同一检测日期覆盖全部装置才计入有效批次。
   </p>
 </section>
 

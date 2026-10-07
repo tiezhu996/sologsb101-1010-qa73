@@ -143,12 +143,21 @@ interface SeedDevice {
 }
 
 /**
- * 播种演示数据：2 栋建筑物 → 6 个防雷装置 → 9 个测点 → 逐点自动初判 → 2 条整改建议，
- * 保证父 → 子 → 孙三层链路可点开，且既有合格也有不合格样本。
+ * 播种演示数据：3 栋建筑物 → 7 个防雷装置 → 11 个测点 → 逐点自动初判 → 整改建议，
+ * 保证父 → 子 → 孙三层链路可点开，且覆盖各类复测情形：
+ * 油库已过 12 个月复测周期（个别新读数不遮批次）、医院新增装置待补检、学校即将到期。
  */
 export async function seedDemoData(): Promise<void> {
   const now = Date.now()
   const today = new Date(now).toISOString().slice(0, 10)
+  /** 相对今天往前推 n 天的日期（YYYY-MM-DD），用于铺出不同复测状态 */
+  const dateDaysAgo = (days: number): string => new Date(now - days * 86400000).toISOString().slice(0, 10)
+  // 油库（一类 / 油库统一 12 个月）：最近全覆盖批次在 400 天前，已过复测周期
+  const oilBatchDate = dateDaysAgo(400)
+  // 医院（二类 18 个月）：存量装置 610 天前成批检测，另有新增装置未测点
+  const hospBatchDate = dateDaysAgo(610)
+  // 学校（三类 24 个月）：批次在 700 天前，距到期约 30 天（即将到期）
+  const schoolBatchDate = dateDaysAgo(700)
 
   const buildings: Array<Omit<Building, 'createdAt' | 'updatedAt'>> = [
     {
@@ -198,7 +207,7 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 3.2,
           limitOhm: 10,
           meter: 'ZC-8 接地电阻测试仪 / No.20230517',
-          measureDate: today
+          measureDate: oilBatchDate
         },
         {
           id: 'pnt_oil_belt_2',
@@ -208,6 +217,18 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 4.1,
           limitOhm: 10,
           meter: 'ZC-8 接地电阻测试仪 / No.20230517',
+          measureDate: oilBatchDate
+        },
+        {
+          // 后来补测的新读数：仅覆盖本装置，不构成覆盖全部装置的批次，
+          // 不能把整栋楼的到期日往后顺延
+          id: 'pnt_oil_belt_3',
+          deviceId: 'dev_oil_belt',
+          code: 'JD-OIL-02A',
+          location: '屋面东北角接闪带补测点',
+          measuredOhm: 3.6,
+          limitOhm: 10,
+          meter: 'DER2571 数字接地电阻表 / No.A240301',
           measureDate: today
         }
       ]
@@ -229,7 +250,7 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 12.6,
           limitOhm: 10,
           meter: 'ZC-8 接地电阻测试仪 / No.20230517',
-          measureDate: today
+          measureDate: oilBatchDate
         },
         {
           id: 'pnt_oil_down_2',
@@ -239,7 +260,7 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 6.8,
           limitOhm: 10,
           meter: 'ZC-8 接地电阻测试仪 / No.20230517',
-          measureDate: today
+          measureDate: oilBatchDate
         }
       ]
     },
@@ -260,7 +281,7 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 3.9,
           limitOhm: 4,
           meter: 'ZC-8 接地电阻测试仪 / No.20230517',
-          measureDate: today
+          measureDate: oilBatchDate
         },
         {
           id: 'pnt_oil_grid_2',
@@ -270,7 +291,7 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 5.4,
           limitOhm: 4,
           meter: 'ZC-8 接地电阻测试仪 / No.20230517',
-          measureDate: today
+          measureDate: oilBatchDate
         }
       ]
     },
@@ -291,7 +312,7 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 7.4,
           limitOhm: 10,
           meter: 'DER2571 数字接地电阻表 / No.A221104',
-          measureDate: today
+          measureDate: hospBatchDate
         }
       ]
     },
@@ -312,7 +333,7 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 8.9,
           limitOhm: 10,
           meter: 'DER2571 数字接地电阻表 / No.A221104',
-          measureDate: today
+          measureDate: hospBatchDate
         },
         {
           id: 'pnt_hosp_down_2',
@@ -322,9 +343,20 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 15.2,
           limitOhm: 10,
           meter: 'DER2571 数字接地电阻表 / No.A221104',
-          measureDate: today
+          measureDate: hospBatchDate
         }
       ]
+    },
+    {
+      // 新增装置：尚未录入测点，整栋楼因此标「待补检」，同一日期补齐后才恢复有效
+      id: 'dev_hosp_grid',
+      buildingId: 'bld_hosp02',
+      type: '接地体',
+      material: '紫铜排',
+      spec: '-50×5',
+      quantity: 16,
+      installDate: today,
+      points: []
     },
     {
       id: 'dev_school_belt',
@@ -343,7 +375,7 @@ export async function seedDemoData(): Promise<void> {
           measuredOhm: 9.4,
           limitOhm: 10,
           meter: 'ZC-8 接地电阻测试仪 / No.20201122',
-          measureDate: today
+          measureDate: schoolBatchDate
         }
       ]
     }

@@ -7,6 +7,7 @@
   import EmptyPanel from '$lib/components/common/EmptyPanel.svelte'
   import StatBadge from '$lib/components/common/StatBadge.svelte'
   import QualifyTag from '$lib/components/common/QualifyTag.svelte'
+  import RetestTag from '$lib/components/common/RetestTag.svelte'
   import { buildingList, deviceList } from '$lib/stores/buildingStore.ts'
   import { pointList } from '$lib/stores/pointStore.ts'
   import { qualifyStats, rectifyList } from '$lib/stores/rectifyStore.ts'
@@ -29,6 +30,7 @@
     validateBackup
   } from '$lib/utils/export.ts'
   import type { ConclusionLine, CountMap } from '$lib/utils/export.ts'
+  import type { RetestStatus } from '$lib/utils/retest.ts'
   import { RECTIFY_STATES } from '$lib/types/rectify.ts'
 
   const EMPTY_COUNTS: CountMap = { buildings: 0, devices: 0, points: 0, verdicts: 0, rectifies: 0 }
@@ -114,7 +116,7 @@
     const text = conclusions
       .map(
         (line) =>
-          `${line.buildingName}（${line.protectionClass} / ${line.usage}）：装置 ${line.deviceCount} 处，测点 ${line.pointCount} 个，不合格 ${line.unqualifiedCount} 个，合格率 ${line.qualifyRatePct}%。${line.conclusion}。最不利点：${line.worstPoint}。${line.advice}`
+          `${line.buildingName}（${line.protectionClass} / ${line.usage}）：装置 ${line.deviceCount} 处，测点 ${line.pointCount} 个，不合格 ${line.unqualifiedCount} 个，合格率 ${line.qualifyRatePct}%。复测周期 ${line.cycleMonths} 个月，最近全覆盖检测批次 ${line.lastBatchDate ?? '—'}，复测到期日 ${line.dueDate ?? '—'}，复测状态：${line.retestStatusText}，缺检装置：${line.missingDeviceText}。${line.conclusion}。最不利点：${line.worstPoint}。${line.advice}`
       )
       .join('\n')
     try {
@@ -146,7 +148,7 @@
     <div>
       <h2 class="page__title">检测结论与结构版本导出</h2>
       <p class="gb-hint">
-        按建筑物汇总检测结论（装置数、测点数、不合格数、合格率与最不利点），并可导出 / 导入全量 JSON 备份。
+        按建筑物汇总检测结论（装置数、测点数、不合格数、合格率、最近全覆盖检测批次、复测到期日与缺检装置），并可导出 / 导入全量 JSON 备份。
       </p>
     </div>
     <div class="page__actions">
@@ -181,6 +183,10 @@
         最近备份 {lastBackupAt ? new Date(lastBackupAt).toLocaleString('zh-CN') : '尚未备份'}
       </span>
     </div>
+    <p class="gb-hint">
+      复测口径：到期日只依据最近一次「覆盖全部装置且每个装置都有测点」的检测批次（一类 12 / 二类 18 / 三类 24 个月，油库与化工厂统一 12 个月），
+      不取单个测点的最新日期；新增装置或测点缺失时整栋标待补检，同一日期补齐后恢复有效。
+    </p>
 
     {#if conclusions.length === 0}
       <EmptyPanel title="还没有建筑物" description="先到「建筑物台账」新建建筑物并录入测点，即可生成检测结论。" compact />
@@ -193,6 +199,10 @@
             <th class="is-num">装置</th>
             <th class="is-num">测点</th>
             <th class="is-num">不合格</th>
+            <th>复测状态</th>
+            <th>最近检测批次</th>
+            <th>复测到期日</th>
+            <th>缺检装置</th>
             <th>检测结论</th>
             <th>最不利点</th>
             <th>整改建议</th>
@@ -200,15 +210,25 @@
         </thead>
         <tbody>
           {#each conclusions as line (line.buildingId)}
-            <tr class:is-bad={line.unqualifiedCount > 0}>
+            <tr
+              class:is-bad={line.unqualifiedCount > 0 || line.retestStatus === '已到期' || line.retestStatus === '待补检' || line.retestStatus === '未检测'}
+            >
               <td>{line.buildingName}</td>
               <td>
                 <span class="gb-tag">{line.protectionClass}</span>
                 <span class="gb-hint"> {line.usage}</span>
+                <div class="gb-hint">周期 {line.cycleMonths} 个月</div>
               </td>
               <td class="is-num gb-mono">{line.deviceCount}</td>
               <td class="is-num gb-mono">{line.pointCount}</td>
               <td class="is-num gb-mono">{line.unqualifiedCount}</td>
+              <td>
+                <RetestTag status={line.retestStatus as RetestStatus} size="small" title={line.retestStatusText} />
+                <div class="gb-hint">{line.retestStatusText}</div>
+              </td>
+              <td class="gb-mono">{line.lastBatchDate ?? '—'}</td>
+              <td class="gb-mono">{line.dueDate ?? '—'}</td>
+              <td class="gb-hint">{line.missingDeviceText}</td>
               <td>
                 <div>{line.conclusion}</div>
                 <div class="gb-hint">合格率 {line.qualifyRatePct}%</div>

@@ -22,6 +22,9 @@
     updatePoint
   } from '$lib/stores/pointStore.ts'
   import { buildingById, deviceList, selectBuilding } from '$lib/stores/buildingStore.ts'
+  import { retestPlanMap } from '$lib/stores/retestPlanStore.ts'
+  import RetestTag from '$lib/components/common/RetestTag.svelte'
+  import { describeRetestStatus } from '$lib/utils/retest.ts'
   import { parsePointPaste } from '$lib/types/point.ts'
   import type { Point, PointPasteRow } from '$lib/types/point.ts'
   import { DEVICE_TYPES } from '$lib/types/device.ts'
@@ -105,6 +108,8 @@
     $activeDeviceId ? $deviceList.find((device) => device.id === $activeDeviceId) ?? null : null
   )
   const activeBuilding = $derived(activeDevice ? buildingById(activeDevice.buildingId) : null)
+  /** 当前建筑物复测计划：到期口径只认覆盖全部装置的检测批次 */
+  const activePlan = $derived(activeBuilding ? $retestPlanMap.get(activeBuilding.id) ?? null : null)
   const defaultLimit = $derived(
     activeDevice ? suggestLimitOhm(activeBuilding?.protectionClass ?? '三类', activeDevice.type) : 10
   )
@@ -255,6 +260,21 @@
         <p class="gb-hint">
           当前装置：{activeBuilding?.name ?? '未知建筑物'} · {activeDevice.type}
           {activeDevice.spec ? `（${activeDevice.spec}）` : ''} · 建议限值 {defaultLimit} Ω
+        </p>
+      {/if}
+      {#if activePlan}
+        <p class="retest-banner" class:is-bad={activePlan.status === '已到期' || activePlan.status === '待补检' || activePlan.status === '未检测'} class:is-warn={activePlan.status === '即将到期'}>
+          <RetestTag status={activePlan.status} size="small" title={describeRetestStatus(activePlan)} />
+          <span>
+            最近全覆盖批次 {activePlan.lastBatchDate ?? '—'}，复测到期日 {activePlan.dueDate ?? '—'}（周期 {activePlan.cycleMonths} 个月）。
+            {#if activePlan.missingDevices.length > 0}
+              缺检装置：{activePlan.missingDevices
+                .map((item) => `${item.deviceType}${item.spec ? `（${item.spec}）` : ''}`)
+                .join('、')}
+              ，请在同一日期补齐。
+            {/if}
+            仅给个别装置补新读数不会顺延到期日，必须全部装置同日有测点才构成新批次。
+          </span>
         </p>
       {/if}
     </div>
@@ -522,6 +542,32 @@
     flex-wrap: wrap;
     align-items: flex-end;
     gap: 10px;
+  }
+
+  .retest-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #dfe4ea;
+    background: #f7fafc;
+    font-size: 12px;
+    color: #5b6b78;
+  }
+
+  .retest-banner.is-warn {
+    border-color: #f0c78a;
+    background: #fff8ec;
+    color: #8a5a12;
+  }
+
+  .retest-banner.is-bad {
+    border-color: #f0b4ac;
+    background: #fff6f4;
+    color: #8a3a2e;
   }
 
   .row-actions {

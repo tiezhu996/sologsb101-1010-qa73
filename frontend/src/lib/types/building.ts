@@ -33,6 +33,10 @@ export interface BuildingFilterState {
   minFloors: number | null
   /** 是否只看存在不合格测点的建筑物 */
   onlyUnqualified: boolean
+  /** 是否只看已过复测周期（到期）的建筑物 */
+  onlyDue: boolean
+  /** 是否只看待补检（新增装置或测点缺失）的建筑物 */
+  onlyPendingRetest: boolean
 }
 
 export function createEmptyBuildingFilter(): BuildingFilterState {
@@ -41,7 +45,9 @@ export function createEmptyBuildingFilter(): BuildingFilterState {
     usages: [],
     protectionClasses: [],
     minFloors: null,
-    onlyUnqualified: false
+    onlyUnqualified: false,
+    onlyDue: false,
+    onlyPendingRetest: false
   }
 }
 
